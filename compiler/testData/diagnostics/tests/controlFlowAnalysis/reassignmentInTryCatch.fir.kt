@@ -20,7 +20,7 @@ fun f2() {
         throw Exception()
     }
     finally {
-        n = 2
+        <!VAL_REASSIGNMENT!>n<!> = 2
     }
     n.hashCode()
 }
@@ -45,7 +45,7 @@ fun g2(flag: Boolean) {
         n = 1
     }
     finally {
-        n = 2
+        <!VAL_REASSIGNMENT!>n<!> = 2
     }
     n.hashCode()
 }
@@ -96,7 +96,7 @@ fun k2(flag: Boolean) {
         j(flag)
     }
     finally {
-        n = 2
+        <!VAL_REASSIGNMENT!>n<!> = 2
     }
     n.hashCode()
 }

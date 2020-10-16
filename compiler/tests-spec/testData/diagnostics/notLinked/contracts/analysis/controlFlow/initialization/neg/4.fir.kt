@@ -33,7 +33,7 @@ fun case_3() {
     funWithAtLeastOnceCallsInPlace {
         val value_1: Int
         funWithAtMostOnceCallsInPlace {
-            value_1 = 10
+            <!VAL_REASSIGNMENT!>value_1<!> = 10
         }
         funWithAtMostOnceCallsInPlace {
             <!UNINITIALIZED_VARIABLE!>value_1<!>.inc()
@@ -52,7 +52,7 @@ fun case_4() {
     funWithAtLeastOnceCallsInPlace {
         val value_1: Int
         funWithExactlyOnceCallsInPlace {
-            value_1 = 10
+            <!VAL_REASSIGNMENT!>value_1<!> = 10
         }
         funWithAtMostOnceCallsInPlace {
             value_1.inc()
@@ -79,7 +79,7 @@ fun case_5() {
         value_1.inc()
     }
     funWithUnknownCallsInPlace {
-        value_1 = 1
+        <!VAL_REASSIGNMENT!>value_1<!> = 1
     }
     <!UNINITIALIZED_VARIABLE!>value_1<!>.dec()
 }

@@ -26,7 +26,7 @@ fun innerTryCatchFinally() {
             x = 42
             report(x)
         } finally {
-            x = 0
+            <!VAL_REASSIGNMENT!>x<!> = 0
         }
     }
 

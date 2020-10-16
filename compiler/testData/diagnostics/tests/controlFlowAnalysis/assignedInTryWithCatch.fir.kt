@@ -50,7 +50,7 @@ fun assignedAtAll() {
     } catch (e: Exception) {
         a = 41
     } finally {
-        a = 40
+        <!VAL_REASSIGNMENT!>a<!> = 40
     }
     a.hashCode()
 }
@@ -64,7 +64,7 @@ fun sideEffectBeforeAssignedInTryCatchButNotFinally(s: Any) {
         s as String // Potential cast exception
         a = 41
     } finally {
-        a = 40
+        <!VAL_REASSIGNMENT!>a<!> = 40
     }
     a.hashCode()
 }

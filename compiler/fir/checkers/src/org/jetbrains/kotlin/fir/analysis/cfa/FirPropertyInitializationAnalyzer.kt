@@ -6,15 +6,14 @@
 package org.jetbrains.kotlin.fir.analysis.cfa
 
 import org.jetbrains.kotlin.contracts.description.EventOccurrencesRange
+import org.jetbrains.kotlin.contracts.description.canBeRevisited
 import org.jetbrains.kotlin.contracts.description.isDefinitelyVisited
 import org.jetbrains.kotlin.fir.analysis.diagnostics.DiagnosticReporter
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors
 import org.jetbrains.kotlin.fir.declarations.isLateInit
+import org.jetbrains.kotlin.fir.expressions.FirQualifiedAccess
 import org.jetbrains.kotlin.fir.references.FirResolvedNamedReference
-import org.jetbrains.kotlin.fir.resolve.dfa.cfg.CFGNode
-import org.jetbrains.kotlin.fir.resolve.dfa.cfg.ControlFlowGraph
-import org.jetbrains.kotlin.fir.resolve.dfa.cfg.ControlFlowGraphVisitorVoid
-import org.jetbrains.kotlin.fir.resolve.dfa.cfg.QualifiedAccessNode
+import org.jetbrains.kotlin.fir.resolve.dfa.cfg.*
 import org.jetbrains.kotlin.fir.symbols.impl.FirPropertySymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirVariableSymbol
 
@@ -43,21 +42,55 @@ object FirPropertyInitializationAnalyzer : AbstractFirPropertyInitializationChec
     ) : ControlFlowGraphVisitorVoid() {
         override fun visitNode(node: CFGNode<*>) {}
 
+        private fun getPropertySymbol(node: CFGNode<*>): FirPropertySymbol? {
+            val reference = (node.fir as? FirQualifiedAccess)?.calleeReference as? FirResolvedNamedReference ?: return null
+            return reference.resolvedSymbol as? FirPropertySymbol
+        }
+
+        override fun visitVariableAssignmentNode(node: VariableAssignmentNode) {
+            val symbol = getPropertySymbol(node) ?: return
+            val pathAwareInfo = data.getValue(node)
+            for (label in pathAwareInfo.keys) {
+                if (investigateVariableAssignment(pathAwareInfo[label]!!, symbol, node)) {
+                    // To avoid duplicate reports, stop investigating remaining paths if the property is re-initialized at any path.
+                    break
+                }
+            }
+        }
+
+        private fun investigateVariableAssignment(
+            info: PropertyInitializationInfo,
+            symbol: FirPropertySymbol,
+            node: VariableAssignmentNode
+        ): Boolean {
+            val kind = info[symbol] ?: EventOccurrencesRange.ZERO
+            if (symbol.fir.isVal && kind.canBeRevisited()) {
+                node.fir.lValue.source?.let {
+                    reporter.report(FirErrors.VAL_REASSIGNMENT.on(it, symbol))
+                    return true
+                }
+            }
+            return false
+        }
+
         override fun visitQualifiedAccessNode(node: QualifiedAccessNode) {
-            val reference = node.fir.calleeReference as? FirResolvedNamedReference ?: return
-            val symbol = reference.resolvedSymbol as? FirPropertySymbol ?: return
+            val symbol = getPropertySymbol(node) ?: return
             if (symbol !in localProperties) return
             if (symbol.fir.isLateInit) return
             val pathAwareInfo = data.getValue(node)
             for (label in pathAwareInfo.keys) {
-                if (investigate(pathAwareInfo[label]!!, symbol, node)) {
+                if (investigateVariableAccess(pathAwareInfo[label]!!, symbol, node)) {
                     // To avoid duplicate reports, stop investigating remaining paths if the property is not initialized at any path.
                     break
                 }
             }
         }
 
-        private fun investigate(info: PropertyInitializationInfo, symbol: FirPropertySymbol, node: QualifiedAccessNode): Boolean {
+        private fun investigateVariableAccess(
+            info: PropertyInitializationInfo,
+            symbol: FirPropertySymbol,
+            node: QualifiedAccessNode
+        ): Boolean {
             val kind = info[symbol] ?: EventOccurrencesRange.ZERO
             if (!kind.isDefinitelyVisited()) {
                 node.fir.source?.let {
