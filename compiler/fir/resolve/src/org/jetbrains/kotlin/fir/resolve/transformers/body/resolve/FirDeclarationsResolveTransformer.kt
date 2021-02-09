@@ -727,6 +727,20 @@ open class FirDeclarationsResolveTransformer(transformer: FirBodyResolveTransfor
         anonymousFunction: FirAnonymousFunction,
         data: ResolutionMode
     ): CompositeTransformResult<FirStatement> {
+        if (anonymousFunction.returnTypeRef is FirImplicitTypeRef) {
+            val lastStatement = anonymousFunction.body?.statements?.singleOrNull()
+            // Simply { }, i.e., function literals without body. Raw FIR added an implicit return with an implicit unit type ref.
+            if (lastStatement?.source?.kind is FirFakeSourceElementKind.ImplicitReturn &&
+                (lastStatement as? FirReturnExpression)?.result?.source?.kind is FirFakeSourceElementKind.ImplicitUnit
+            ) {
+                anonymousFunction.replaceReturnTypeRef(
+                    buildResolvedTypeRef {
+                        source = anonymousFunction.source?.fakeElement(FirFakeSourceElementKind.ImplicitTypeRef)
+                        type = session.builtinTypes.unitType.type
+                    }
+                )
+            }
+        }
         // Either ContextDependent, ContextIndependent or WithExpectedType could be here
         if (data !is ResolutionMode.LambdaResolution) {
             anonymousFunction.transformReturnTypeRef(transformer, ResolutionMode.ContextIndependent)
