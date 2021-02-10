@@ -9,6 +9,7 @@ import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.fir.*
 import org.jetbrains.kotlin.fir.declarations.*
 import org.jetbrains.kotlin.fir.diagnostics.ConeSimpleDiagnostic
+import org.jetbrains.kotlin.fir.diagnostics.DiagnosticKind
 import org.jetbrains.kotlin.fir.expressions.*
 import org.jetbrains.kotlin.fir.references.builder.buildErrorNamedReference
 import org.jetbrains.kotlin.fir.references.builder.buildResolvedCallableReference
@@ -436,7 +437,29 @@ class FirCallCompletionResultsWriterTransformer(
         // Control flow info is necessary prerequisite because we collect return expressions in that function
         //
         // Example: second lambda in the call like list.filter({}, {})
-        if (!dataFlowAnalyzer.isThereControlFlowInfoForAnonymousFunction(anonymousFunction)) return anonymousFunction.compose()
+        if (!dataFlowAnalyzer.isThereControlFlowInfoForAnonymousFunction(anonymousFunction)) {
+            // But, don't leave implicit type refs behind
+            val implicitTypeTransformer = object : FirDefaultTransformer<Nothing?>() {
+                override fun <E : FirElement> transformElement(element: E, data: Nothing?): CompositeTransformResult<E> {
+                    @Suppress("UNCHECKED_CAST")
+                    return (element.transformChildren(this, data) as E).compose()
+                }
+
+                override fun transformImplicitTypeRef(
+                    implicitTypeRef: FirImplicitTypeRef,
+                    data: Nothing?
+                ): CompositeTransformResult<FirTypeRef> =
+                    buildErrorTypeRef {
+                        source = implicitTypeRef.source
+                        diagnostic = ConeSimpleDiagnostic("Cannot infer type w/o CFG", DiagnosticKind.InferenceError)
+                    }.compose()
+
+            }
+            // TODO: should we transform simply all children?
+            anonymousFunction.transformReturnTypeRef(implicitTypeTransformer, null)
+            anonymousFunction.transformValueParameters(implicitTypeTransformer, null)
+            return anonymousFunction.compose()
+        }
 
         val expectedType = data?.getExpectedType(anonymousFunction)?.let { expectedArgumentType ->
             // From the argument mapping, the expected type of this anonymous function would be:
